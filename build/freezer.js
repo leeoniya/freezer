@@ -1,19 +1,10 @@
-/* freezer-js v0.13.0 (3-7-2017)
- * https://github.com/arqex/freezer
- * By arqex
- * License: MIT
- */
-(function(root, factory) {
-	if (typeof define === 'function' && define.amd) {
-		define([], factory);
-	} else if (typeof exports === 'object') {
-		module.exports = factory();
-	} else {
-		root.Freezer = factory();
-	}
-}(this, function() {
-	'use strict';
-	
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
+	typeof define === 'function' && define.amd ? define(factory) :
+	(global.Freezer = factory());
+}(this, (function () { 'use strict';
+
+//#build
 var global = typeof global !== 'undefined' ?
 	global :
 	typeof self !== 'undefined' ?
@@ -83,7 +74,7 @@ var Utils = {
 				configurable: true,
 				enumerable: false,
 				value: attrs[ key ]
-			}
+			};
 		}
 
 		return ne;
@@ -102,7 +93,7 @@ var Utils = {
 				global.postMessage(messageName, '*');
 			}
 			: function trigger () {
-				setTimeout(function () { processQueue() }, 0);
+				setTimeout(function () { processQueue(); }, 0);
 			};
 		}()),
 		processQueue = (function () {
@@ -114,8 +105,7 @@ var Utils = {
 					}
 				}
 				: flushQueue;
-    	})()
-    ;
+    	})();
 
     function flushQueue () {
 				dirty = false;
@@ -135,7 +125,7 @@ var Utils = {
 
     nextTick.removeListener = function () {
         global.removeEventListener('message', processQueue, true);
-    }
+    };
 
     return nextTick;
   })(),
@@ -150,8 +140,7 @@ var Utils = {
   		var found = 0,
   			parents = node.__.parents,
   			i = 0,
-  			parent
-  		;
+  			parent;
 
   		// Look up for the pivot in the parents
   		while( !found && i < parents.length ){
@@ -195,7 +184,107 @@ var Utils = {
 	}
 };
 
+//#build
 
+
+var utils = Utils;
+
+//#build
+
+
+var BEFOREALL = 'beforeAll';
+var AFTERALL = 'afterAll';
+var specialEvents = [BEFOREALL, AFTERALL];
+
+// The prototype methods are stored in a different object
+// and applied as non enumerable properties later
+var emitterProto = {
+	on: function( eventName, listener, once ){
+		var listeners = this._events[ eventName ] || [];
+
+		listeners.push({ callback: listener, once: once});
+		this._events[ eventName ] =  listeners;
+
+		return this;
+	},
+
+	once: function( eventName, listener ){
+		return this.on( eventName, listener, true );
+	},
+
+	off: function( eventName, listener ){
+		if( typeof eventName === 'undefined' ){
+			this._events = {};
+		}
+		else if( typeof listener === 'undefined' ) {
+			this._events[ eventName ] = [];
+		}
+		else {
+			var listeners = this._events[ eventName ] || [],
+				i;
+
+			for (i = listeners.length - 1; i >= 0; i--) {
+				if( listeners[i].callback === listener )
+					listeners.splice( i, 1 );
+			}
+		}
+
+		return this;
+	},
+
+	emit: function( eventName ){
+		var args = [].slice.call( arguments, 1 ),
+			listeners = this._events[ eventName ] || [],
+			onceListeners = [],
+			special = specialEvents.indexOf( eventName ) !== -1,
+			i, listener, returnValue, lastValue;
+
+		special || this.emit.apply( this, [BEFOREALL, eventName].concat( args ) );
+
+		// Call listeners
+		for (i = 0; i < listeners.length; i++) {
+			listener = listeners[i];
+
+			if( listener.callback )
+				lastValue = listener.callback.apply( this, args );
+			else {
+				// If there is not a callback, remove!
+				listener.once = true;
+			}
+
+			if( listener.once )
+				onceListeners.push( i );
+
+			if( lastValue !== undefined ){
+				returnValue = lastValue;
+			}
+		}
+
+		// Remove listeners marked as once
+		for( i = onceListeners.length - 1; i >= 0; i-- ){
+			listeners.splice( onceListeners[i], 1 );
+		}
+
+		special || this.emit.apply( this, [AFTERALL, eventName].concat( args ) );
+
+		return returnValue;
+	},
+
+	trigger: function(){
+		utils.warn( false, 'Method `trigger` is deprecated and will be removed from freezer in upcoming releases. Please use `emit`.' );
+		return this.emit.apply( this, arguments );
+	}
+};
+
+// Methods are not enumerable so, when the stores are
+// extended with the emitter, they can be iterated as
+// hashmaps
+var Emitter = utils.createNonEnumerable( emitterProto );
+//#build
+
+var emitter = Emitter;
+
+//#build
 var nodeCreator = {
 	init: function( Frozen ){
 
@@ -204,13 +293,12 @@ var nodeCreator = {
 				var attrs = attr,
 					update = this.__.trans,
 					isArray = this.constructor === Array,
-					msg = 'Freezer arrays only accept numeric attributes, given: '
-				;
+					msg = 'Freezer arrays only accept numeric attributes, given: ';
 
 				if( typeof attr !== 'object' ){
 					if( isArray && parseInt(attr) != attr ){
-						Utils.warn( 0, msg + attr );
-						return Utils.findPivot( this ) || this;
+						utils.warn( 0, msg + attr );
+						return utils.findPivot( this ) || this;
 					}
 					attrs = {};
 					attrs[ attr ] = value;
@@ -219,8 +307,8 @@ var nodeCreator = {
 				if( !update ){
 					for( var key in attrs ){
 						if( isArray && parseInt(key) != key ){
-							Utils.warn( 0, msg + key );
-							return Utils.findPivot( this ) || this;
+							utils.warn( 0, msg + key );
+							return utils.findPivot( this ) || this;
 						}
 						else {
 							update = update || this[ key ] !== attrs[ key ];
@@ -229,7 +317,7 @@ var nodeCreator = {
 
 					// No changes, just return the node
 					if( !update )
-						return Utils.findPivot( this ) || this;
+						return utils.findPivot( this ) || this;
 				}
 
 				var name = isArray ? 'array.set' : 'object.set';
@@ -253,7 +341,7 @@ var nodeCreator = {
 					js = {};
 				}
 
-				Utils.each( this, function( child, i ){
+				utils.each( this, function( child, i ){
 					if( child && child.__ )
 						js[ i ] = child.toJS();
 					else
@@ -280,7 +368,7 @@ var nodeCreator = {
 			}
 		};
 
-		var arrayMethods = Utils.extend({
+		var arrayMethods = utils.extend({
 			push: function( el ){
 				return this.append( [el], 'array.push' );
 			},
@@ -326,13 +414,12 @@ var nodeCreator = {
 			}
 		}, commonMethods );
 
-		var FrozenArray = Object.create( Array.prototype, Utils.createNE( arrayMethods ) );
+		var FrozenArray = Object.create( Array.prototype, utils.createNE( arrayMethods ) );
 
-		var objectMethods = Utils.createNE( Utils.extend({
+		var objectMethods = utils.createNE( utils.extend({
 			remove: function( keys ){
 				var filtered = [],
-					k = keys
-				;
+					k = keys;
 
 				if( keys.constructor !== Array )
 					k = [ keys ];
@@ -385,104 +472,14 @@ var nodeCreator = {
 					return Object.create( cons.prototype, objectMethods );
 				}
 			}
-		}
-	}
-}
-
-
-
-var BEFOREALL = 'beforeAll',
-	AFTERALL = 'afterAll'
-;
-var specialEvents = [BEFOREALL, AFTERALL];
-
-// The prototype methods are stored in a different object
-// and applied as non enumerable properties later
-var emitterProto = {
-	on: function( eventName, listener, once ){
-		var listeners = this._events[ eventName ] || [];
-
-		listeners.push({ callback: listener, once: once});
-		this._events[ eventName ] =  listeners;
-
-		return this;
-	},
-
-	once: function( eventName, listener ){
-		return this.on( eventName, listener, true );
-	},
-
-	off: function( eventName, listener ){
-		if( typeof eventName === 'undefined' ){
-			this._events = {};
-		}
-		else if( typeof listener === 'undefined' ) {
-			this._events[ eventName ] = [];
-		}
-		else {
-			var listeners = this._events[ eventName ] || [],
-				i
-			;
-
-			for (i = listeners.length - 1; i >= 0; i--) {
-				if( listeners[i].callback === listener )
-					listeners.splice( i, 1 );
-			}
-		}
-
-		return this;
-	},
-
-	emit: function( eventName ){
-		var args = [].slice.call( arguments, 1 ),
-			listeners = this._events[ eventName ] || [],
-			onceListeners = [],
-			special = specialEvents.indexOf( eventName ) !== -1,
-			i, listener, returnValue, lastValue
-		;
-
-		special || this.emit.apply( this, [BEFOREALL, eventName].concat( args ) );
-
-		// Call listeners
-		for (i = 0; i < listeners.length; i++) {
-			listener = listeners[i];
-
-			if( listener.callback )
-				lastValue = listener.callback.apply( this, args );
-			else {
-				// If there is not a callback, remove!
-				listener.once = true;
-			}
-
-			if( listener.once )
-				onceListeners.push( i );
-
-			if( lastValue !== undefined ){
-				returnValue = lastValue;
-			}
-		}
-
-		// Remove listeners marked as once
-		for( i = onceListeners.length - 1; i >= 0; i-- ){
-			listeners.splice( onceListeners[i], 1 );
-		}
-
-		special || this.emit.apply( this, [AFTERALL, eventName].concat( args ) );
-
-		return returnValue;
-	},
-
-	trigger: function(){
-		Utils.warn( false, 'Method `trigger` is deprecated and will be removed from freezer in upcoming releases. Please use `emit`.' );
-		return this.emit.apply( this, arguments );
+		};
 	}
 };
+//#build
 
-// Methods are not enumerable so, when the stores are
-// extended with the emitter, they can be iterated as
-// hashmaps
-var Emitter = Utils.createNonEnumerable( emitterProto );
+var nodeCreator_1 = nodeCreator;
 
+//#build
 var Frozen = {
 	freeze: function( node, store ){
 		if( node && node.__ ){
@@ -490,18 +487,17 @@ var Frozen = {
 		}
 
 		var me = this,
-			frozen = nodeCreator.clone(node)
-		;
+			frozen = nodeCreator_1.clone(node);
 
-		Utils.addNE( frozen, { __: {
+		utils.addNE( frozen, { __: {
 			listener: false,
 			parents: [],
 			store: store
 		}});
 
 		// Freeze children
-		Utils.each( node, function( child, key ){
-			if( !Utils.isLeaf( child, store.freezeInstances ) ){
+		utils.each( node, function( child, key ){
+			if( !utils.isLeaf( child, store.freezeInstances ) ){
 				child = me.freeze( child, store );
 			}
 
@@ -522,8 +518,7 @@ var Frozen = {
 			trans = _.trans,
 
 			// Clone the attrs to not modify the argument
-			attrs = Utils.extend( {}, attrs)
-		;
+			attrs = utils.extend( {}, attrs);
 
 		if( trans ){
 			for( var attr in attrs )
@@ -534,10 +529,9 @@ var Frozen = {
 		var me = this,
 			frozen = this.copyMeta( node ),
 			store = _.store,
-			val, key, isFrozen
-		;
+			val, key, isFrozen;
 
-		Utils.each( node, function( child, key ){
+		utils.each( node, function( child, key ){
 			isFrozen = child && child.__;
 
 			if( isFrozen ){
@@ -551,7 +545,7 @@ var Frozen = {
 				return frozen[ key ] = child;
 			}
 
-			if( !Utils.isLeaf( val, store.freezeInstances ) )
+			if( !utils.isLeaf( val, store.freezeInstances ) )
 				val = me.freeze( val, store );
 
 			if( val && val.__ )
@@ -566,7 +560,7 @@ var Frozen = {
 		for( key in attrs ) {
 			val = attrs[ key ];
 
-			if( !Utils.isLeaf( val, store.freezeInstances ) )
+			if( !utils.isLeaf( val, store.freezeInstances ) )
 				val = me.freeze( val, store );
 
 			if( val && val.__ )
@@ -585,10 +579,9 @@ var Frozen = {
 	replace: function( node, replacement ) {
 		var me = this,
 			_ = node.__,
-			frozen = replacement
-		;
+			frozen = replacement;
 
-		if( !Utils.isLeaf( replacement, _.store.freezeInstances ) ) {
+		if( !utils.isLeaf( replacement, _.store.freezeInstances ) ) {
 
 			frozen = me.freeze( replacement, _.store );
 			frozen.__.parents = _.parents;
@@ -617,10 +610,9 @@ var Frozen = {
 
 		var me = this,
 			frozen = this.copyMeta( node ),
-			isFrozen
-		;
+			isFrozen;
 
-		Utils.each( node, function( child, key ){
+		utils.each( node, function( child, key ){
 			isFrozen = child && child.__;
 
 			if( isFrozen ){
@@ -645,8 +637,7 @@ var Frozen = {
 
 	splice: function( node, args ){
 		var _ = node.__,
-			trans = _.trans
-		;
+			trans = _.trans;
 
 		if( trans ){
 			trans.splice.apply( trans, args );
@@ -657,11 +648,10 @@ var Frozen = {
 			frozen = this.copyMeta( node ),
 			index = args[0],
 			deleteIndex = index + args[1],
-			child
-		;
+			child;
 
 		// Clone the array
-		Utils.each( node, function( child, i ){
+		utils.each( node, function( child, i ){
 
 			if( child && child.__ ){
 				me.removeParent( child, node );
@@ -679,7 +669,7 @@ var Frozen = {
 			for (var i = args.length - 1; i >= 2; i--) {
 				child = args[i];
 
-				if( !Utils.isLeaf( child, _.store.freezeInstances ) )
+				if( !utils.isLeaf( child, _.store.freezeInstances ) )
 					child = this.freeze( child, _.store );
 
 				if( child && child.__ )
@@ -701,15 +691,14 @@ var Frozen = {
 	transact: function( node ) {
 		var me = this,
 			transacting = node.__.trans,
-			trans
-		;
+			trans;
 
 		if( transacting )
 			return transacting;
 
 		trans = node.constructor === Array ? [] : {};
 
-		Utils.each( node, function( child, key ){
+		utils.each( node, function( child, key ){
 			trans[ key ] = child;
 		});
 
@@ -717,7 +706,7 @@ var Frozen = {
 
 		// Call run automatically in case
 		// the user forgot about it
-		Utils.nextTick( function(){
+		utils.nextTick( function(){
 			if( node.__.trans )
 				me.run( node );
 		});
@@ -727,14 +716,13 @@ var Frozen = {
 
 	run: function( node ) {
 		var me = this,
-			trans = node.__.trans
-		;
+			trans = node.__.trans;
 
 		if( !trans )
 			return node;
 
 		// Remove the node as a parent
-		Utils.each( trans, function( child, key ){
+		utils.each( trans, function( child, key ){
 			if( child && child.__ ){
 				me.removeParent( child, node );
 			}
@@ -753,7 +741,7 @@ var Frozen = {
 	},
 
 	unpivot: function( node ){
-		Utils.nextTick( function(){
+		utils.nextTick( function(){
 			node.__.pivot = 0;
 		});
 	},
@@ -761,12 +749,11 @@ var Frozen = {
 	refresh: function( node, oldChild, newChild ){
 		var me = this,
 			trans = node.__.trans,
-			found = 0
-		;
+			found = 0;
 
 		if( trans ){
 
-			Utils.each( trans, function( child, key ){
+			utils.each( trans, function( child, key ){
 				if( found ) return;
 
 				if( child === oldChild ){
@@ -783,10 +770,9 @@ var Frozen = {
 		}
 
 		var frozen = this.copyMeta( node ),
-			replacement, __
-		;
+			replacement, __;
 
-		Utils.each( node, function( child, key ){
+		utils.each( node, function( child, key ){
 			if( child === oldChild ){
 				child = newChild;
 			}
@@ -806,7 +792,7 @@ var Frozen = {
 
 	fixChildren: function( node, oldNode ){
 		var me = this;
-		Utils.each( node, function( child ){
+		utils.each( node, function( child ){
 			if( !child || !child.__ )
 				return;
 
@@ -826,11 +812,10 @@ var Frozen = {
 
 	copyMeta: function( node ){
 		var me = this,
-			frozen = nodeCreator.clone( node ),
-			_ = node.__
-		;
+			frozen = nodeCreator_1.clone( node ),
+			_ = node.__;
 
-		Utils.addNE( frozen, {__: {
+		utils.addNE( frozen, {__: {
 			store: _.store,
 			updateRoot: _.updateRoot,
 			listener: _.listener,
@@ -848,8 +833,7 @@ var Frozen = {
 	refreshParents: function( oldChild, newChild ){
 		var _ = oldChild.__,
 			parents = _.parents.length,
-			i
-		;
+			i;
 
 		if( oldChild.__.updateRoot ){
 			oldChild.__.updateRoot( oldChild, newChild );
@@ -866,8 +850,7 @@ var Frozen = {
 
 	removeParent: function( node, parent ){
 		var parents = node.__.parents,
-			index = parents.indexOf( parent )
-		;
+			index = parents.indexOf( parent );
 
 		if( index !== -1 ){
 			parents.splice( index, 1 );
@@ -876,8 +859,7 @@ var Frozen = {
 
 	addParent: function( node, parent ){
 		var parents = node.__.parents,
-			index = parents.indexOf( parent )
-		;
+			index = parents.indexOf( parent );
 
 		if( index === -1 ){
 			parents[ parents.length ] = parent;
@@ -905,11 +887,10 @@ var Frozen = {
 		}
 
 		if( !ticking ){
-			Utils.nextTick( function(){
+			utils.nextTick( function(){
 				if( listener.ticking ){
 					var updated = listener.ticking,
-						prevState = listener.prevState
-					;
+						prevState = listener.prevState;
 
 					listener.ticking = 0;
 					listener.prevState = 0;
@@ -924,7 +905,7 @@ var Frozen = {
 		var l = frozen.__.listener;
 
 		if( !l ) {
-			l = Object.create(Emitter, {
+			l = Object.create(emitter, {
 				_events: {
 					value: {},
 					writable: true
@@ -938,29 +919,31 @@ var Frozen = {
 	}
 };
 
-nodeCreator.init( Frozen );
+nodeCreator_1.init( Frozen );
+//#build
 
+var frozen = Frozen;
+
+//#build
 var Freezer = function( initialValue, options ) {
 	var me = this,
 		ops = options || {},
 		store = {
 			live: ops.live || false,
 			freezeInstances: ops.freezeInstances || false
-		}
-	;
+		};
 
 	// Immutable data
-	var frozen;
+	var frozen$$1;
 	var pivotTriggers = [], pivotTicking = 0;
 	var triggerNow = function( node ){
 		var _ = node.__,
-			i
-		;
+			i;
 
 		if( _.listener ){
 			var prevState = _.listener.prevState || node;
 			_.listener.prevState = 0;
-			Frozen.emit( prevState, 'update', node, true );
+			frozen.emit( prevState, 'update', node, true );
 		}
 
 		for (i = 0; i < _.parents.length; i++) {
@@ -972,7 +955,7 @@ var Freezer = function( initialValue, options ) {
 		pivotTriggers.push( node );
 		if( !pivotTicking ){
 			pivotTicking = 1;
-			Utils.nextTick( function(){
+			utils.nextTick( function(){
 				pivotTriggers = [];
 				pivotTicking = 0;
 			});
@@ -1002,10 +985,10 @@ var Freezer = function( initialValue, options ) {
 			return node;
 		}
 
-		var update = Frozen[eventName]( node, options );
+		var update = frozen[eventName]( node, options );
 
 		if( eventName !== 'pivot' ){
-			var pivot = Utils.findPivot( update );
+			var pivot = utils.findPivot( update );
 			if( pivot ) {
 				addToPivotTriggers( update );
 	  		return pivot;
@@ -1021,10 +1004,10 @@ var Freezer = function( initialValue, options ) {
 	;
 
 	// Create the frozen object
-	frozen = Frozen.freeze( initialValue, store );
-	frozen.__.updateRoot = function( prevNode, updated ){
-		if( prevNode === frozen ){
-			frozen = updated;
+	frozen$$1 = frozen.freeze( initialValue, store );
+	frozen$$1.__.updateRoot = function( prevNode, updated ){
+		if( prevNode === frozen$$1 ){
+			frozen$$1 = updated;
 			if( lastCall ){
 				lastCall.onStore = true;
 			}
@@ -1036,39 +1019,44 @@ var Freezer = function( initialValue, options ) {
 				}
 			});
 		}
-	}
+	};
 
 	// Listen to its changes immediately
-	var listener = frozen.getListener(),
-		hub = {}
-	;
+	var listener = frozen$$1.getListener(),
+		hub = {};
 
-	Utils.each(['on', 'off', 'once', 'emit', 'trigger'], function( method ){
+	utils.each(['on', 'off', 'once', 'emit', 'trigger'], function( method ){
 		var attrs = {};
 		attrs[ method ] = listener[method].bind(listener);
-		Utils.addNE( me, attrs );
-		Utils.addNE( hub, attrs );
+		utils.addNE( me, attrs );
+		utils.addNE( hub, attrs );
 	});
 
-	Utils.addNE( this, {
+	utils.addNE( this, {
 		get: function(){
-			return frozen;
+			return frozen$$1;
 		},
 		set: function( node ){
-			frozen.reset( node );
+			frozen$$1.reset( node );
 		},
 		getEventHub: function(){
 			return hub;
 		}
 	});
 
-	Utils.addNE( this, { getData: this.get, setData: this.set } );
+	utils.addNE( this, { getData: this.get, setData: this.set } );
 };
 
 function detachedWarn( lastCall ){
-	Utils.warn( false, 'Method ' + lastCall.name + ' called on a detached node.', lastCall.node, lastCall.options );
+	utils.warn( false, 'Method ' + lastCall.name + ' called on a detached node.', lastCall.node, lastCall.options );
 }
 
+//#build
 
-	return Freezer;
-}));
+var freezer = Freezer;
+
+var freezer$2 = freezer;
+
+return freezer$2;
+
+})));
